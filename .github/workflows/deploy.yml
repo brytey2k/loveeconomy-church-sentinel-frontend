@@ -35,6 +35,7 @@ jobs:
           cp .env.ci .env
           php artisan key:generate
         env:
+          DB_CONNECTION: sqlite
           CACHE_DRIVER: redis
           REDIS_HOST: 127.0.0.1
           REDIS_PORT: 6379
