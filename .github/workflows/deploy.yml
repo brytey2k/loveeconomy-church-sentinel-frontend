@@ -1,0 +1,70 @@
+name: Deploy Laravel to Ubuntu Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, bcmath, ctype, fileinfo, json, pdo, tokenizer, xml, redis
+          tools: composer
+
+      - name: Install Dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction --optimize-autoloader
+
+      - name: Set Up Environment File
+        run: |
+          cp .env.ci .env
+          php artisan key:generate
+        env:
+          CACHE_DRIVER: redis
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+
+      - name: Run Tests
+        run: php artisan test
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: 178.79.191.62
+          username: lec_sentinel_user
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd /var/www/loveeconomy-church-sentinel-frontend
+            git pull origin main
+            composer install --no-dev --prefer-dist --optimize-autoloader
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan route:clear
+            php artisan view:clear
+            chown -R lec_sentinel_user:www-data /var/www/loveeconomy-church-sentinel-frontend
+            chmod -R 775 /var/www/loveeconomy-church-sentinel-frontend/storage
+            chmod -R 775 /var/www/loveeconomy-church-sentinel-frontend/bootstrap/cache
